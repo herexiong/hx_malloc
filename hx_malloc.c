@@ -1,34 +1,3 @@
-#include <stdio.h>
-	char col_data[2][20];
-
-char *hello ="hello world\n";
-
-char* getData(int col){
-	return *(col_data+col);	
-}
-
-void pushData(int col,char *data){
-	int i=0;
-	while(*data!= '\n'){
-		col_data[col][i]=*data;
-		data++;
-		i++;
-	}
-}
-
-int main()
-{
-   /*  Write C code in this online editor and run it. */
-   pushData(0 , hello);
-   pushData(1 , "...");
-   pushData(2 , "fuck");	
-   printf("%s\n",getData(0));
-   printf("%s\n",getData(1));
-   printf("%s\n",getData(2));
-   return 0;
-}
-
-
 ////////////////////////////////////////////////////////////
 ///实现简单的堆内存分配和释放
 #include <stdio.h>
@@ -37,33 +6,41 @@ int main()
 /***********内存管理基本配置**************/
 #define MEMSIZE 80
 #define MEMMANAGE MEMSIZE/8
-#define MEMATOM u_int8_t 
+#define MEMATOM __UINT8_TYPE__
+
+//#define hx_mallocLOG //用于打印调试信息
+
 #include <string.h>
 /****************************************/
 
 /****************管理的内存区************/
 struct MemoryManager{
-	MEMATOM Mem[MEMSIZE];
-	MEMATOM MemManager[MEMMANAGE];
-	void *My_malloc;
-	void *My_free;
+	MEMATOM Mem[MEMSIZE];//需要管理的内存，通过数组实现
+	MEMATOM MemManager[MEMMANAGE];//内存管理表，用于指示内存的使用情况，1bit对应1Byte的内存
+	void *My_malloc;//内存分配函数
+	void *My_free;//释放内存函数
 }MEM1;
 
 /****************************************/
 /***********内存申请句柄*****************/
 struct MemHandler{
-	MEMATOM *pos;
-	int length;
+	MEMATOM *pos;//内存起始地址
+	MEMATOM beginPos;//数组中起始的序号
+	int length;//申请的内存长度
 }test1;
 /****************************************/
 
 /****************内存操作函数************/
 //实现往一个8bit的int类型的第num位写1,从右往左数
-void set2int8(MEMATOM *target , MEMATOM num){
+void set2int8(MEMATOM *target , MEMATOM num){//用于写内存管理表
 	*target |= 1<<(num-1);
 }
-
-void WritMemManager(int pos , int len){
+//实现往一个8bit的int类型的第num位写0,从右往左数
+void reset2int8(MEMATOM *target , MEMATOM num){//用于写内存管理表
+	*target &= ~(1<<(num-1));
+}
+//内存申请后需要将对应的内存管理表写入相关数据
+void WritMemManager(int pos , int len , int flag){
 	//根据传入的内存地址和长度向对应的内存管理器写1
 	int begin = pos/8;//起始
 	MEMATOM num = pos%8;//从左往右数的，从1开始
@@ -72,8 +49,15 @@ void WritMemManager(int pos , int len){
 	p=pos-pos/8;
 		
 	for(int i=0;i<len;i++){
-		set2int8(&MEM1.MemManager[begin],8-num);
-		printf("MemManager[%d]->%d\n",begin,8-num);
+		if (flag)
+		{
+			set2int8(&MEM1.MemManager[begin],8-num);
+		}
+		else 
+		{
+			reset2int8(&MEM1.MemManager[begin],8-num);
+		}
+		printf("MemManager[%d]->%d=%d\n",begin,8-num,MEM1.MemManager[begin]);
 		if(num==7){
 			printf("continue\n");
 			num=0;
@@ -99,7 +83,7 @@ MEMATOM* my_malloc(int Byte_len){//内存申请函数,必须以字节为单位
 			if(count==Byte_len){
 				//写入MemManager
 				j++;
-				WritMemManager(8*i+j-Byte_len , Byte_len);
+				WritMemManager(8*i+j-Byte_len , Byte_len ,1);
 				printf("TAG=my_malloc success pos=%d\n",8*i+j-Byte_len);
 				return &MEM1.Mem[8*i+j-Byte_len];//找到空闲空间	
 			}
@@ -118,8 +102,9 @@ MEMATOM* my_malloc(int Byte_len){//内存申请函数,必须以字节为单位
 	}
 }
 
-int my_free(){//内存释放函数
-	
+int my_free(struct MemHandler *obj){//内存释放函数
+	//往内存管理表内需要释放的位置写0
+	WritMemManager(obj->beginPos , obj->length , 0);
 	return 1;
 }
 
@@ -130,8 +115,9 @@ void memInit(void){//初始化函数
 	MEM1.My_free=&my_free;
 }
 /****************************************/
-void NewMemHandler(struct MemHandler *obj,int len){
+void NewMemHandler(struct MemHandler *obj,int len){//初始化内存申请句柄
 	obj->pos = my_malloc(len);
+	obj->beginPos = obj->pos-MEM1.Mem;
 	obj->length = len;
 }
 /***************内存检查函数*************/
@@ -151,89 +137,23 @@ void MemManagerCheck(void){
 	printf("\n");
 }
 /****************************************/
-int stack[20];
-int stackPoint=0;
-
-void pushStack(int data){
-	stack[stackPoint]=data;
-	stackPoint++;
-}
-
-int getStack(void){
-	return stack[stackPoint];
-}
-
-void outStack(void){
-	stackPoint--;
-}
-
-struct chain{
-	int data;
-	struct chain *p;
-};
-
-struct chain* chainInit(void){
-	struct chain *Init = malloc(sizeof(struct chain));
-	Init->data=0;
-	Init->p=NULL;
-}
-
-void pushData2Chain(struct chain *Init,int Data){
-	struct chain *NewChainNode = malloc(sizeof(struct chain));
-	int i=0,length=Init->data;
-	struct chain *Temp=Init;
-	Init->data++;
-	for(i;i<length;i++){
-		if(Temp->p == NULL){
-			printf("error:TAG=pushData2Chain chain error\n");
-			return;
-		}
-		Temp=Temp->p;
-	}
-	Temp->p = NewChainNode;
-	NewChainNode->data=Data;
-	NewChainNode->p=NULL;
-}
-//数据的存储从1开始
-int getDataFromChian(struct chain *Init,int pos){
-	int i=0;
-	if(pos<1){
-		printf("error:pos too small\n");	
-		return 0;
-	}
-	if(Init->data<pos){
-		printf("error:out of range\n");
-		return 0;
-	}
-	while(i !=pos && Init->p != NULL){
-		Init=Init->p;
-		i++;
-	}
-	return Init->data;
-}
 
 int main(void){
 	struct MemHandler a,b,c;
-	struct chain *Init = chainInit();
-	for(int i=0;i<10;i++){
-		pushData2Chain(Init,i);
-		pushStack(i);
-	}
-	for(int j=1;j<11;j++){
-		printf("%d",getDataFromChian(Init,j));
-	}
-	printf("\n");
-	for(int c=0;c<10;c++){
-		printf("%d",getStack());
-		outStack();
-	}
-	printf("\n");
-	
+
 	memInit();
 	NewMemHandler(&a,10);
 	NewMemHandler(&b,10);
 	NewMemHandler(&c,10);
-	
+	MemManagerCheck();
+
+	my_free(&a);
+	MemManagerCheck();
+
+	my_free(&b);
+	MemManagerCheck();	
+
+	my_free(&c);
 	MemManagerCheck();
 	return 0;
 }
