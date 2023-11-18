@@ -4,11 +4,12 @@
 #include <stdlib.h>
 
 /***********内存管理基本配置**************/
-#define MEMSIZE 80
-#define MEMMANAGE MEMSIZE/8
-#define MEMATOM __UINT8_TYPE__
+#define MEMSIZE 80 //内存管理的大小
+#define MEMMANAGE MEMSIZE/8//内存管理表的大小
+#define MEMATOM __UINT8_TYPE__//内存管理的基本单位，即1Byte
 
 //#define hx_mallocLOG //用于打印调试信息
+//#define hx_mallocNotice //打印分配提示信息
 
 #include <string.h>
 /****************************************/
@@ -20,8 +21,8 @@ struct MemoryManager{
 	void *My_malloc;//内存分配函数
 	void *My_free;//释放内存函数
 }MEM1;
-
 /****************************************/
+
 /***********内存申请句柄*****************/
 struct MemHandler{
 	MEMATOM *pos;//内存起始地址
@@ -40,14 +41,14 @@ void reset2int8(MEMATOM *target , MEMATOM num){//用于写内存管理表
 	*target &= ~(1<<(num-1));
 }
 //内存申请后需要将对应的内存管理表写入相关数据
+
 void WritMemManager(int pos , int len , int flag){
 	//根据传入的内存地址和长度向对应的内存管理器写1
 	int begin = pos/8;//起始
 	MEMATOM num = pos%8;//从左往右数的，从1开始
-	MEMATOM p=0;//0-8之间的游标
-	printf("TAG=WritMemManager pos=%d len=%d\n",pos,len);
-	p=pos-pos/8;
-		
+	#ifdef hx_mallocLOG
+	printf("Notice:TAG=WritMemManager begin pos=%d len=%d\n",pos,len);
+	#endif		
 	for(int i=0;i<len;i++){
 		if (flag)
 		{
@@ -57,25 +58,32 @@ void WritMemManager(int pos , int len , int flag){
 		{
 			reset2int8(&MEM1.MemManager[begin],8-num);
 		}
+		#ifdef hx_mallocLOG
 		printf("MemManager[%d]->%d=%d\n",begin,8-num,MEM1.MemManager[begin]);
+		#endif
 		if(num==7){
+			#ifdef hx_mallocLOG
 			printf("continue\n");
+			#endif
 			num=0;
 			begin++;
 			continue;
 		}
 		else num++;
 	}
+	#ifdef hx_mallocLOG
 	printf("TAG=WritMemManager success Manager[%d]=%d\n",0,MEM1.MemManager[0]);
 	printf("TAG=WritMemManager success Manager[%d]=%d\n",1,MEM1.MemManager[1]);
+	#endif
 }
 
 MEMATOM* my_malloc(int Byte_len){//内存申请函数,必须以字节为单位
 	int i=0,j=0,count=0;
 	while(1){
 		if(i>MEMSIZE){
-			printf("error:TAG=my_malloc faild i=%d\n",i);
-			printf("error:TAG=my_malloc faild\n");
+			#ifdef hx_mallocNotice
+			printf("error:TAG=my_malloc space short i=%d\n",i);
+			#endif
 			return NULL;
 		}
 		if(! (MEM1.MemManager[i] & (1<<(7-j)))){
@@ -84,16 +92,22 @@ MEMATOM* my_malloc(int Byte_len){//内存申请函数,必须以字节为单位
 				//写入MemManager
 				j++;
 				WritMemManager(8*i+j-Byte_len , Byte_len ,1);
-				printf("TAG=my_malloc success pos=%d\n",8*i+j-Byte_len);
+				#ifdef hx_mallocNotice
+				printf("Notice:TAG=my_malloc success pos=%d\n",8*i+j-Byte_len);
+				#endif
 				return &MEM1.Mem[8*i+j-Byte_len];//找到空闲空间	
 			}
 		}
 		else{
-			printf("error:TAG=my_malloc MemManager[%d]=%d,&%d\n ",i,MEM1.MemManager[i/8], (1<<(7-j)) );
+			#ifdef hx_mallocLOG
+			printf("Notice:TAG=my_malloc skipping for another intact Mem [%d]=%d,&%d\n ",i,MEM1.MemManager[i/8], (1<<(7-j)) );
+			#endif
 			count=0;
 		}
 		if(j==7){
-			printf("my_malloc continue j=0 i=%d\n ",i+1);
+			#ifdef hx_mallocLOG
+			printf("Notice:TAG=my_malloc continue j=0 i=%d\n ",i+1);
+			#endif
 			j=0;
 			i++;
 			continue;
@@ -108,7 +122,7 @@ int my_free(struct MemHandler *obj){//内存释放函数
 	return 1;
 }
 
-void memInit(void){//初始化函数
+void memInit(void){//内存初始化函数
 	memset(MEM1.Mem,0,sizeof(MEMATOM)*MEMSIZE);	
 	memset(MEM1.MemManager,0,sizeof(MEMATOM)*MEMMANAGE);
 	MEM1.My_malloc=&my_malloc;
