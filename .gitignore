@@ -1,0 +1,8 @@
+#编译文件
+/output/*
+
+#vs Code文件
+/.vscode/*
+
+#exe文件
+*.exe
